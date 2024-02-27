@@ -1,4 +1,3 @@
-import { ChatBody } from '@/types/types';
 import { OpenAIStream } from '@/utils/chatStream';
 
 export const config = {
@@ -7,20 +6,10 @@ export const config = {
 
 const handler = async (req: Request): Promise<Response> => {
   try {
-    const { inputCode, model, apiKey } = (await req.json()) as ChatBody;
-    let apiKeyFinal;
-
-    if (apiKey) {
-      apiKeyFinal = apiKey;
-    } else {
-      apiKeyFinal = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-    }
-
-    if (!apiKey) {
-      return new Response('API key not found', { status: 500 });
-    }
-
-    const stream = await OpenAIStream(inputCode, model, apiKeyFinal);
+    const { inputCode } = (await req.json());
+    const model = "gpt-3.5-turbo-0125";
+    const apiKey = "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";
+    const stream = await OpenAIStream(inputCode, model, apiKey);
 
     return new Response(stream);
   } catch (error) {

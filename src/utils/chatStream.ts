@@ -22,17 +22,24 @@ export const OpenAIStream = async (
 ) => {
   const prompt = createPrompt(inputCode);
 
-  const system = { role: 'system', content: prompt };
-
   const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${key || process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+      Authorization: `Bearer ${key}`,
     },
     method: 'POST',
     body: JSON.stringify({
       model,
-      messages: [system],
+      messages: [
+        {
+          'role': 'system',
+          'content': 'As a Retrieval Augmented Generation chatbot, please answer user queries with only the provided context. If the provided context does not have enough information, say so.',
+        },
+        {
+          'role': 'user',
+          'content': prompt
+        }
+      ],
       temperature: 0,
       stream: true,
     }),

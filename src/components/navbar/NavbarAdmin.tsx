@@ -113,15 +113,15 @@ export default function AdminNavbar(props: {
           <Breadcrumb>
             <BreadcrumbItem color={secondaryText} fontSize="sm" mb="5px">
               <BreadcrumbLink href="#" color={secondaryText}>
-                Pages
+                SabIA
               </BreadcrumbLink>
             </BreadcrumbItem>
 
-            <BreadcrumbItem color={secondaryText} fontSize="sm">
+            {/* <BreadcrumbItem color={secondaryText} fontSize="sm">
               <BreadcrumbLink href="#" color={secondaryText}>
                 {brandText}
               </BreadcrumbLink>
-            </BreadcrumbItem>
+            </BreadcrumbItem> */}
           </Breadcrumb>
           {/* Here we create navbar brand, based on route name */}
           <Link
@@ -144,9 +144,6 @@ export default function AdminNavbar(props: {
           >
             {brandText}
           </Link>
-        </Box>
-        <Box ms="auto" w={{ sm: '100%', md: 'unset' }}>
-          <AdminNavbarLinks setApiKey={setApiKey} secondary={props.secondary} />
         </Box>
       </Flex>
     </Box>
