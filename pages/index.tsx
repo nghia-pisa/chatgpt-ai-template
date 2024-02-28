@@ -71,7 +71,7 @@ export default function Chat() {
       body: JSON.stringify({ "updatedQuery": updatedQuery }),
     });
     const chatResult = await chatRequest.json();
-    console.log(searchResults)
+    console.log(chatResult)
 
     const controller = new AbortController();
 

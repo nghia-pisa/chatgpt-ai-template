@@ -1,38 +1,10 @@
 import ReactMarkdown from 'react-markdown'
-import {
-  Button,
-  useColorModeValue,
-  SlideFade
-} from '@chakra-ui/react'
+import { useColorModeValue } from '@chakra-ui/react'
 import Card from '@/components/card/Card'
-import { FaFilePdf } from "react-icons/fa";
 
-export default function MessageBox(props: { output: string, isLoading: boolean, references: Array<String> }) {
-  const { output, isLoading, references } = props;
+export default function MessageBox(props: { output: string }) {
+  const { output } = props;
   const textColor = useColorModeValue('navy.700', 'white');
-
-  // let restrictedReferences = references.slice(0, )
-  let restrictedReferences = references;
-
-  const docsReferencia = restrictedReferences.map(fileName => 
-      <Button
-        as="a"
-        href={`https://storage.googleapis.com/psa-gen-search/${fileName}`}
-        target="_blank"
-        variant="outline"
-        size="sm"
-        leftIcon={<FaFilePdf />}
-        marginLeft='.3rem'
-        marginTop='.5rem'
-        // spacing="2"
-        _hover={{
-          bg: "#4d2be6",
-          color: "#ffffff"
-        }}
-      >
-        {fileName}
-      </Button>
-  )
 
   return (
     <Card
@@ -49,7 +21,6 @@ export default function MessageBox(props: { output: string, isLoading: boolean, 
       <ReactMarkdown className="font-medium">
         {output ? output : ''}
       </ReactMarkdown>
-      {!isLoading && <span><SlideFade in={true} offsetY='20px' transition={{enter: {delay: 0.25}}}>{docsReferencia}</SlideFade></span>}
     </Card>
   )
 }

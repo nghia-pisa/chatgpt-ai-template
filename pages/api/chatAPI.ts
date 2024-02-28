@@ -8,7 +8,7 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { inputCode } = (await req.json());
     const model = "gpt-3.5-turbo-0125";
-    const apiKey = "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";
+    const apiKey = process.env.OPENAI_API_KEY;
     const stream = await OpenAIStream(inputCode, model, apiKey);
 
     return new Response(stream);
