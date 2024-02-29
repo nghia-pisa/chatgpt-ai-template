@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { updatedQuery } = req.body;
       const chatEndpoint = "https://api.openai.com/v1/chat/completions";
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = process.env.OPENAI_API;
       const model = "gpt-3.5-turbo-0125";
 
       const chatRequest = await fetch(chatEndpoint, {
@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               "content": updatedQuery
             }
           ],
-          temperature: 0
+          temperature: 1
         }),
       });
 

@@ -2,30 +2,54 @@
 /*eslint-disable*/
 
 // import Link from '@/components/link/Link';
-import MessageBoxChat from '@/components/MessageBox';
 import {
   Button,
+  Fade,
   Flex,
   Icon,
   Img,
   Input,
+  SlideFade,
   Text,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MdAutoAwesome, MdPerson } from 'react-icons/md';
 import Bg from '../public/img/chat/Logo-GP-Blanco.png';
+import Card from '@/components/card/Card'
+import { FaFilePdf } from "react-icons/fa";
+import { MdEmail } from "react-icons/md";
+import { ImBlocked } from "react-icons/im";
+
+interface SearchResult {
+  _additional: object;
+  filename: string;
+  text: string;
+}
+interface resultsWithLinks {
+  chatResult: {
+    name: string,
+    email: string,
+    score: string,
+    comment: string
+  };
+  filename: string
+}
 
 export default function Chat() {
   // Input States
-  const [inputOnSubmit, setInputOnSubmit] = useState<string>('');
-  const [query, setQuery] = useState<string>('');
-  // Response message
-  const [outputCode, setOutputCode] = useState<string>('');
+  const [inputOnSubmit, setInputOnSubmit] = useState<string>("");
+  const [query, setQuery] = useState<string>("");
   // Loading state
   const [loading, setLoading] = useState<boolean>(false);
-  // Docs reference
-  const [docReference, setDocReference] = useState<String[]>([]);
+  // Email loading state
+  const [emailLoading, setEmailLoading] = useState<boolean>(false);
+  // Selected email state
+  const [selectedEmail, setSelectedEmail] = useState<number>();
+  // Search results
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  // Final results
+  const [resultsWithLinks, setResultsWithLinks] = useState<resultsWithLinks[]>([]);
 
   // API Key
   // const [apiKey, setApiKey] = useState<string>(apiKeyApp);
@@ -39,61 +63,52 @@ export default function Chat() {
     { color: 'whiteAlpha.600' },
   );
 
-  const handleTranslate = async () => {
-    // const apiKey = apiKeyApp;
-    setInputOnSubmit(query);
-
-    if (!query) {
-      alert('Por favor captura un mensaje.');
-      return;
-    }
-
-    setOutputCode(' ');
-    setLoading(true);
-
+  const handleSearch = async () => {
     const searchRequest = await fetch('/api/search', {
       method: "POST",
-      headers :{
+      headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ "userQuery": query })
     });
-    const searchResults = await searchRequest.json();
-    
-    const testCandidate = searchResults.data.Get.Cvs[0].text
+    const results = await searchRequest.json();
 
-    const updatedQuery = `Given the following job description:\n${query}.\nGive a short comment and an evaluation score on fit out of 10 of the following candidate:\n${testCandidate}\nThe comment has to be in the job description original language. Format the answer as JSON, with a key for the candidate's name, one for comment and one for the score`
-    const chatRequest = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ "updatedQuery": updatedQuery }),
-    });
-    const chatResult = await chatRequest.json();
-    console.log(chatResult)
+    setSearchResults(results.data.Get.Cvs)
+  };
 
-    const controller = new AbortController();
+  const handleLLM = async () => {
+    for (const searchResult of searchResults) {
+      try {
+        const chatRequest = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letter only, "email": candidate's email, "score": evaluation score, "comment": comment}` }),
+        });
+        if (!chatRequest.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const result = await chatRequest.json();
+        // Append each new piece of data along with its original text to the array
+        setResultsWithLinks(prevResults => [...prevResults, { chatResult: JSON.parse(result.choices[0].message.content), filename: searchResult.filename }]);
+      } catch (error) {
+        console.error('There was an error fetching the data', error);
+      }
+    }
+    setLoading(false)
+  };
 
-    // if (!data) {
-    //   setLoading(false);
-    //   alert('Something went wrong');
-    //   return;
-    // }
+  const handleSubmit = () => {
+    if (!query) {
+      alert('Por favor captura un mensaje.');
+      return;
+    }
+    setLoading(true);
 
-    // const reader = data.getReader();
-    // const decoder = new TextDecoder();
-    // let done = false;
+    setResultsWithLinks([]);
+    setInputOnSubmit(query);
 
-    // while (!done) {
-    //   setLoading(true);
-    //   const { value, done: doneReading } = await reader.read();
-    //   done = doneReading;
-    //   const chunk = decoder.decode(value);
-    //   setOutputCode((prevCode) => prevCode + chunk);
-    // }
-
-    setLoading(false);
+    handleSearch();
+    handleLLM();
   };
 
   const handleChange = (event: any) => {
@@ -103,9 +118,41 @@ export default function Chat() {
   const handleInput = (event: any) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      handleTranslate();
+      handleSubmit();
       setQuery("");
     }
+  }
+
+  const handleEmail = (index: number) => {
+
+    setEmailLoading(true)
+    setSelectedEmail(index)
+
+    const selectedCandidate = searchResults[index].text;
+    
+    (async () => {
+      try {
+        const emailRequest = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email (120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email if exists, else blank string}` }),
+        });
+        if (!emailRequest.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const result = await emailRequest.json();
+        // Append each new piece of data along with its original text to the array
+        const jsonResult = JSON.parse(result.choices[0].message.content)
+        const emailBody = jsonResult.body.replace(/\n/g, '%0D%0A');
+
+        window.location.href = `mailto:${jsonResult.email}?subject=${jsonResult.subject}&body=${emailBody}`;
+        
+        setEmailLoading(false)
+        console.log(result)
+      } catch (error) {
+        console.error('There was an error fetching the data', error);
+      }
+    })();
   }
 
   return (
@@ -132,7 +179,7 @@ export default function Chat() {
         maxW="1000px"
       >
         {/* Model Change */}
-        <Flex direction={'column'} w="100%" mb={outputCode ? '20px' : 'auto'}>
+        <Flex direction={'column'} w="100%" mb={loading || resultsWithLinks.length > 0 ? '20px' : 'auto'}>
           <Flex
             mx="auto"
             zIndex="2"
@@ -147,7 +194,7 @@ export default function Chat() {
           direction="column"
           w="100%"
           mx="auto"
-          display={outputCode ? 'flex' : 'none'}
+          display={loading || resultsWithLinks.length > 0 ? 'flex' : 'none'}
           mb={'auto'}
         >
           <Flex w="100%" align={'center'} mb="10px">
@@ -206,7 +253,80 @@ export default function Chat() {
                 color="white"
               />
             </Flex>
-            <MessageBoxChat output={outputCode} isLoading={loading} references={docReference} />
+            {/* <MessageBoxChat output={outputCode} /> */}
+            <Card
+              display={loading || resultsWithLinks.length > 0 ? 'flex' : 'none'}
+              // px="22px !important"
+              pl="30px !important"
+              pr="22px !important"
+              color={textColor}
+              minH="100px"
+              fontSize={{ base: 'sm', md: 'md' }}
+              lineHeight={{ base: '26px', md: '30px' }}
+              fontWeight="500"
+            >
+              {resultsWithLinks.map((item, index) => (
+                <>
+                  <Fade in={true}>
+                    <div><b>{item.chatResult.name}:</b> {item.chatResult.score}/10</div>
+                    <div>{item.chatResult.comment}</div>
+                  </Fade>
+                  <SlideFade in={true} offsetY='20px' transition={{ enter: { delay: 0.25 } }}>
+                    <span>
+                      <Button
+                        as="a"
+                        href={`https://storage.googleapis.com/psa-gen-search/${item.filename}`}
+                        target="_blank"
+                        variant="outline"
+                        size="sm"
+                        leftIcon={<FaFilePdf />}
+                        // marginLeft='.3rem'
+                        marginTop='.3rem'
+                        marginBottom='0.8rem'
+                        // spacing="2"
+                        _hover={{
+                          bg: "#4d2be6",
+                          color: "#ffffff"
+                        }}
+                      >
+                        {item.filename}
+                      </Button>
+                      {item.chatResult.email.includes("@") ?
+                        <Button
+                          as="a"
+                          onClick={() => handleEmail(index)}
+                          variant="outline"
+                          size="sm"
+                          isLoading={(emailLoading && selectedEmail == index) ? true : false}
+                          loadingText="Creando correo..."
+                          leftIcon={<MdEmail />}
+                          marginLeft='.5rem'
+                          marginTop='.3rem'
+                          marginBottom='0.8rem'
+                          // spacing="2"
+                          _hover={{
+                            bg: "#4d2be6",
+                            color: "#ffffff",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Contactar al candidato
+                        </Button> : <Button
+                          isDisabled={true}
+                          variant="outline"
+                          size="sm"
+                          leftIcon={<ImBlocked />}
+                          marginLeft='.5rem'
+                          marginTop='.3rem'
+                          marginBottom='0.8rem'
+                        >
+                          Candidato no tiene correo
+                        </Button>}
+                    </span>
+                  </SlideFade>
+                </>
+              ))}
+            </Card>
           </Flex>
         </Flex>
         {/* Chat Input */}
@@ -251,7 +371,7 @@ export default function Chat() {
                 bg: 'linear-gradient(15.46deg, #4A25E1 26.3%, #7B5AFF 86.4%)',
               },
             }}
-            onClick={handleTranslate}
+            onClick={handleSubmit}
             isLoading={loading ? true : false}
           >
             Enviar

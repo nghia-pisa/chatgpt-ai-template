@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   alpha: 0.6
                   fusionType: relativeScoreFusion
                 }
-                autocut: 2
+                limit: 4
               ) {
                 text
                 filename
