@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'POST') {
 
     try {
-      const { userQuery } = req.body;
+      const { query } = req.body;
       const searchEndpoint = "http://34.173.4.147:8080/v1/graphql";
       const collection = "Cvs";
 
@@ -16,19 +16,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             Get {
               ${collection}(
                 hybrid: {
-                  query: "${userQuery}"
+                  query: "${query}"
                   properties: ["text"]
                   alpha: 0.6
                   fusionType: relativeScoreFusion
                 }
-                limit: 4
+                autocut: 2
               ) {
                 text
                 filename
                 _additional {
                   rerank(
                     property: "text"
-                    query: "${userQuery}"
+                    query: "${query}"
                   ) {
                     score
                   }

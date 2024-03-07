@@ -38,10 +38,14 @@ interface resultsWithLinks {
 
 export default function Chat() {
   // Input States
-  const [inputOnSubmit, setInputOnSubmit] = useState<string>("");
   const [query, setQuery] = useState<string>("");
+  const [inputQuery, setInputQuery] = useState<string>("");
   // Loading state
   const [loading, setLoading] = useState<boolean>(false);
+  // Loading state (Load more)
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  // Load more count
+  const [count, setCount] = useState<number>(0);
   // Email loading state
   const [emailLoading, setEmailLoading] = useState<boolean>(false);
   // Selected email state
@@ -64,25 +68,35 @@ export default function Chat() {
   );
 
   const handleSearch = async () => {
-    const searchRequest = await fetch('/api/search', {
-      method: "POST",
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ "userQuery": query })
-    });
-    const results = await searchRequest.json();
-
-    setSearchResults(results.data.Get.Cvs)
+    try {
+      const searchRequest = await fetch('/api/search', {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ "query": inputQuery })
+      });
+      if (!searchRequest.ok) {
+        throw new Error('Network response was not ok');
+      }
+      const results = await searchRequest.json();
+      setSearchResults(results.data.Get.Cvs);
+    } catch (error) {
+      console.error('There was an error fetching the data', error);
+    }
   };
-
+  
+  const resultsPerLoad = 2
   const handleLLM = async () => {
-    for (const searchResult of searchResults) {
+    const startIndex = resultsPerLoad * count
+    const endIndex = resultsPerLoad * (count + 1)
+    for (let i = startIndex; i < endIndex; i++) {
+      let searchResult = searchResults[i]
       try {
         const chatRequest = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letter only, "email": candidate's email, "score": evaluation score, "comment": comment}` }),
+          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${inputQuery}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letters, "email": candidate's email if exists, else blank string, "score": evaluation score, "comment": comment}` }),
         });
         if (!chatRequest.ok) {
           throw new Error('Network response was not ok');
@@ -93,34 +107,43 @@ export default function Chat() {
       } catch (error) {
         console.error('There was an error fetching the data', error);
       }
-    }
-    setLoading(false)
+    };
+    setLoading(false);
+    setLoadingMore(false);
   };
-
+  
   const handleSubmit = () => {
-    if (!query) {
-      alert('Por favor captura un mensaje.');
-      return;
-    }
     setLoading(true);
-
+    setSearchResults([]);
     setResultsWithLinks([]);
-    setInputOnSubmit(query);
+    setQuery(inputQuery);
+    setInputQuery("");
 
     handleSearch();
+    console.log(searchResults);
     handleLLM();
   };
 
-  const handleChange = (event: any) => {
-    setQuery(event.target.value);
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInputQuery(event.target.value);
   };
 
   const handleInput = (event: any) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
+      if (!inputQuery) {
+        alert('Por favor captura un mensaje.');
+        return;
+      }
       handleSubmit();
-      setQuery("");
     }
+  }
+
+  const handleLoadMore = () => {
+    setLoadingMore(true);
+    setCount(c => c + 1);
+    handleLLM();
+    setLoadingMore(false);
   }
 
   const handleEmail = (index: number) => {
@@ -135,7 +158,7 @@ export default function Chat() {
         const emailRequest = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email (120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email if exists, else blank string}` }),
+          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email (120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Address the candidate using first name. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email}` }),
         });
         if (!emailRequest.ok) {
           throw new Error('Network response was not ok');
@@ -148,7 +171,6 @@ export default function Chat() {
         window.location.href = `mailto:${jsonResult.email}?subject=${jsonResult.subject}&body=${emailBody}`;
         
         setEmailLoading(false)
-        console.log(result)
       } catch (error) {
         console.error('There was an error fetching the data', error);
       }
@@ -231,7 +253,7 @@ export default function Chat() {
                 fontSize={{ base: 'sm', md: 'md' }}
                 lineHeight={{ base: '24px', md: '26px' }}
               >
-                {inputOnSubmit}
+                {query}
               </Text>
             </Flex>
           </Flex>
@@ -253,7 +275,6 @@ export default function Chat() {
                 color="white"
               />
             </Flex>
-            {/* <MessageBoxChat output={outputCode} /> */}
             <Card
               display={loading || resultsWithLinks.length > 0 ? 'flex' : 'none'}
               // px="22px !important"
@@ -266,7 +287,7 @@ export default function Chat() {
               fontWeight="500"
             >
               {resultsWithLinks.map((item, index) => (
-                <>
+                <div id={String(index)}>
                   <Fade in={true}>
                     <div><b>{item.chatResult.name}:</b> {item.chatResult.score}/10</div>
                     <div>{item.chatResult.comment}</div>
@@ -280,10 +301,8 @@ export default function Chat() {
                         variant="outline"
                         size="sm"
                         leftIcon={<FaFilePdf />}
-                        // marginLeft='.3rem'
                         marginTop='.3rem'
                         marginBottom='0.8rem'
-                        // spacing="2"
                         _hover={{
                           bg: "#4d2be6",
                           color: "#ffffff"
@@ -324,8 +343,23 @@ export default function Chat() {
                         </Button>}
                     </span>
                   </SlideFade>
-                </>
+                </div>
               ))}
+              <Button
+                display={loading ? "none" : "flex"}
+                size="md"
+                padding="20px"
+                variant="solid"
+                onClick={() => handleLoadMore()}
+                isLoading={loadingMore}
+                _hover={{
+                  bg: "#4d2be6",
+                  color: "#ffffff",
+                  cursor: "pointer"
+                }}
+              >
+                Cargar más ...
+              </Button>
             </Card>
           </Flex>
         </Flex>
@@ -349,7 +383,7 @@ export default function Chat() {
             color={inputColor}
             _placeholder={placeholderColor}
             placeholder="Escribe su consulta aquí..."
-            value={query}
+            value={inputQuery}
             onChange={handleChange}
             onKeyDown={handleInput}
           />

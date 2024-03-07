@@ -43,12 +43,12 @@ async function searchTest() {
   const data = await searchRequest.json();
 
   // Parse the JSON response
-  const newArray = data.data.Get.Cvs.map(({ filename, text }) => ({ filename, text }))
+  console.log(JSON.stringify(data.data.Get.Cvs));
 
-  const fs = require('fs');
-  fs.writeFile('test.txt', JSON.stringify(data), (err) => {
-    if (err) throw err;
-  });
+  // const fs = require('fs');
+  // fs.writeFile('test.txt', JSON.stringify(data), (err) => {
+  //   if (err) throw err;
+  // });
 };
 
 searchTest();

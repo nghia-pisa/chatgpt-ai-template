@@ -10,6 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const chatEndpoint = "https://api.openai.com/v1/chat/completions";
       const apiKey = process.env.OPENAI_API;
       const model = "gpt-3.5-turbo-0125";
+      // const model = "gpt-4-0125-preview";
 
       const chatRequest = await fetch(chatEndpoint, {
         headers: {
