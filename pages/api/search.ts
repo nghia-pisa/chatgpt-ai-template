@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { query } = req.body;
       const searchEndpoint = "http://34.173.4.147:8080/v1/graphql";
-      const collection = "Cvs";
+      const collection = "Cv_jobab";
 
       const searchBody = {
         query: `

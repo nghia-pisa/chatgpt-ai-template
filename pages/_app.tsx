@@ -25,7 +25,6 @@ function App({ Component, pageProps }: AppProps<{}>) {
 
   return (
     <ChakraProvider theme={theme}>
-      {/* <Sidebar setApiKey={setApiKey} routes={routes} /> */}
       <Box
         pt={{ base: '60px', md: '100px' }}
         float="right"
@@ -49,7 +48,7 @@ function App({ Component, pageProps }: AppProps<{}>) {
             <Navbar
               setApiKey={setApiKey}
               onOpen={onOpen}
-              logoText={'Horizon UI Dashboard PRO'}
+              logoText={'SabIA'}
               brandText={getActiveRoute(routes, pathname)}
               secondary={getActiveNavbar(routes, pathname)}
             />

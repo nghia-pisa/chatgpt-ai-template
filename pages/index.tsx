@@ -13,11 +13,11 @@ import {
   Text,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { MdAutoAwesome, MdPerson } from 'react-icons/md';
+import { FaFilePdf } from "react-icons/fa";
 import Bg from '../public/img/chat/Logo-GP-Blanco.png';
 import Card from '@/components/card/Card'
-import { FaFilePdf } from "react-icons/fa";
 import { MdEmail } from "react-icons/md";
 import { ImBlocked } from "react-icons/im";
 
@@ -26,7 +26,7 @@ interface SearchResult {
   filename: string;
   text: string;
 }
-interface resultsWithLinks {
+interface ResultsWithLinks {
   chatResult: {
     name: string,
     email: string,
@@ -44,16 +44,16 @@ export default function Chat() {
   const [loading, setLoading] = useState<boolean>(false);
   // Loading state (Load more)
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  // Load more count
-  const [count, setCount] = useState<number>(0);
   // Email loading state
   const [emailLoading, setEmailLoading] = useState<boolean>(false);
   // Selected email state
   const [selectedEmail, setSelectedEmail] = useState<number>();
   // Search results
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const searchResults = useRef<SearchResult[]>([]);
   // Final results
-  const [resultsWithLinks, setResultsWithLinks] = useState<resultsWithLinks[]>([]);
+  const [resultsWithLinks, setResultsWithLinks] = useState<ResultsWithLinks[]>([]);
+  // Displayed results
+  const displayedResults = useRef(0);
 
   // API Key
   // const [apiKey, setApiKey] = useState<string>(apiKeyApp);
@@ -68,60 +68,59 @@ export default function Chat() {
   );
 
   const handleSearch = async () => {
-    try {
-      const searchRequest = await fetch('/api/search', {
-        method: "POST",
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ "query": inputQuery })
-      });
-      if (!searchRequest.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const results = await searchRequest.json();
-      setSearchResults(results.data.Get.Cvs);
-    } catch (error) {
-      console.error('There was an error fetching the data', error);
+    const searchRequest = await fetch('/api/search', {
+      method: "POST",
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ "query": inputQuery })
+    });
+    if (!searchRequest.ok) {
+      throw new Error('Network response was not ok');
     }
-  };
-  
-  const resultsPerLoad = 2
-  const handleLLM = async () => {
-    const startIndex = resultsPerLoad * count
-    const endIndex = resultsPerLoad * (count + 1)
-    for (let i = startIndex; i < endIndex; i++) {
-      let searchResult = searchResults[i]
-      try {
-        const chatRequest = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${inputQuery}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letters, "email": candidate's email if exists, else blank string, "score": evaluation score, "comment": comment}` }),
-        });
-        if (!chatRequest.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const result = await chatRequest.json();
-        // Append each new piece of data along with its original text to the array
-        setResultsWithLinks(prevResults => [...prevResults, { chatResult: JSON.parse(result.choices[0].message.content), filename: searchResult.filename }]);
-      } catch (error) {
-        console.error('There was an error fetching the data', error);
-      }
+    const results = await searchRequest.json();
+    if (results.data.Get.Cv_jobab) {
+      searchResults.current = results.data.Get.Cv_jobab;
     };
-    setLoading(false);
-    setLoadingMore(false);
+    console.log(searchResults.current);
   };
   
-  const handleSubmit = () => {
+  const resultsPerLoad = 4
+  const handleLLM = async () => {
+    if (searchResults.current) {
+      const startIndex = displayedResults.current
+      const endIndex = Math.min(displayedResults.current + resultsPerLoad, searchResults.current.length)
+      for (let i = startIndex; i < endIndex; i++) {
+        let searchResult = searchResults.current[i]
+        try {
+          const chatRequest = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${inputQuery}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letters, "email": candidate's email if exists, else blank string, "score": evaluation score, "comment": comment}` }),
+          });
+          if (!chatRequest.ok) {
+            throw new Error('Network response was not ok');
+          };
+          const result = await chatRequest.json();
+          // Append each new piece of data along with its original text to the array
+          setResultsWithLinks(prevResults => [...prevResults, { chatResult: JSON.parse(result.choices[0].message.content), filename: searchResult.filename }]);
+          displayedResults.current++;
+        } catch (error) {
+          console.error('There was an error fetching the data', error);
+        };
+      };
+    };
+  };
+  
+  const handleSubmit = async () => {
     setLoading(true);
-    setSearchResults([]);
     setResultsWithLinks([]);
+    displayedResults.current = 0;
     setQuery(inputQuery);
     setInputQuery("");
-
-    handleSearch();
-    console.log(searchResults);
-    handleLLM();
+    await handleSearch();
+    await handleLLM();
+    setLoading(false);
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,10 +138,9 @@ export default function Chat() {
     }
   }
 
-  const handleLoadMore = () => {
+  const handleLoadMore = async () => {
     setLoadingMore(true);
-    setCount(c => c + 1);
-    handleLLM();
+    await handleLLM();
     setLoadingMore(false);
   }
 
@@ -151,14 +149,14 @@ export default function Chat() {
     setEmailLoading(true)
     setSelectedEmail(index)
 
-    const selectedCandidate = searchResults[index].text;
+    const selectedCandidate = searchResults.current[index].text;
     
     (async () => {
       try {
         const emailRequest = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email (120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Address the candidate using first name. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email}` }),
+          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email 120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Address the candidate using first name. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email}` }),
         });
         if (!emailRequest.ok) {
           throw new Error('Network response was not ok');
@@ -201,7 +199,7 @@ export default function Chat() {
         maxW="1000px"
       >
         {/* Model Change */}
-        <Flex direction={'column'} w="100%" mb={loading || resultsWithLinks.length > 0 ? '20px' : 'auto'}>
+        <Flex direction={'column'} w="100%" mb={loading || displayedResults.current > 0 ? '20px' : 'auto'}>
           <Flex
             mx="auto"
             zIndex="2"
@@ -216,7 +214,7 @@ export default function Chat() {
           direction="column"
           w="100%"
           mx="auto"
-          display={loading || resultsWithLinks.length > 0 ? 'flex' : 'none'}
+          display={loading || displayedResults.current > 0 ? 'flex' : 'none'}
           mb={'auto'}
         >
           <Flex w="100%" align={'center'} mb="10px">
@@ -276,7 +274,7 @@ export default function Chat() {
               />
             </Flex>
             <Card
-              display={loading || resultsWithLinks.length > 0 ? 'flex' : 'none'}
+              display={loading || displayedResults.current > 0 ? 'flex' : 'none'}
               // px="22px !important"
               pl="30px !important"
               pr="22px !important"
@@ -287,12 +285,12 @@ export default function Chat() {
               fontWeight="500"
             >
               {resultsWithLinks.map((item, index) => (
-                <div id={String(index)}>
+                <div key={index}>
                   <Fade in={true}>
                     <div><b>{item.chatResult.name}:</b> {item.chatResult.score}/10</div>
                     <div>{item.chatResult.comment}</div>
                   </Fade>
-                  <SlideFade in={true} offsetY='20px' transition={{ enter: { delay: 0.25 } }}>
+                  <SlideFade in={true} offsetY='20px' transition={{ enter: { delay: 0.1 } }}>
                     <span>
                       <Button
                         as="a"
@@ -346,19 +344,22 @@ export default function Chat() {
                 </div>
               ))}
               <Button
-                display={loading ? "none" : "flex"}
+                display={(loading || displayedResults.current == searchResults.current.length) ? "none" : "flex"}
                 size="md"
+                marginTop="0.3em"
                 padding="20px"
                 variant="solid"
                 onClick={() => handleLoadMore()}
                 isLoading={loadingMore}
+                loadingText="Cargando..."
+                bg= "#f6f6f6"
                 _hover={{
                   bg: "#4d2be6",
                   color: "#ffffff",
                   cursor: "pointer"
                 }}
               >
-                Cargar más ...
+                Mostrar más ...
               </Button>
             </Card>
           </Flex>
