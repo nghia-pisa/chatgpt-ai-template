@@ -15,14 +15,22 @@ import {
 } from '@chakra-ui/react';
 import { useState, useRef } from 'react';
 import { MdAutoAwesome, MdPerson } from 'react-icons/md';
-import { FaFilePdf } from "react-icons/fa";
+import {
+  FaFilePdf,
+  FaFileWord,
+  FaFileExcel
+} from "react-icons/fa";
 import Bg from '../public/img/chat/Logo-GP-Blanco.png';
 import Card from '@/components/card/Card'
 import { MdEmail } from "react-icons/md";
 import { ImBlocked } from "react-icons/im";
 
 interface SearchResult {
-  _additional: object;
+  _additional: {
+    rerank: [{
+      score: number;
+    }]
+  };
   filename: string;
   text: string;
 }
@@ -30,15 +38,22 @@ interface ResultsWithLinks {
   chatResult: {
     name: string,
     email: string,
-    score: string,
     comment: string
   };
-  filename: string
+  affinity: number;
+  filename: string;
+}
+interface ValidationResult {
+  answer: string,
+  explanation: string
 }
 
 export default function Chat() {
-  // Input States
+  // Query States
   const [query, setQuery] = useState<string>("");
+  // Query Reference
+  const originalQuery = useRef<string>("");
+  // Input States
   const [inputQuery, setInputQuery] = useState<string>("");
   // Loading state
   const [loading, setLoading] = useState<boolean>(false);
@@ -50,6 +65,8 @@ export default function Chat() {
   const [selectedEmail, setSelectedEmail] = useState<number>();
   // Search results
   const searchResults = useRef<SearchResult[]>([]);
+  // Validation result
+  const validationResult = useRef<ValidationResult>();
   // Final results
   const [resultsWithLinks, setResultsWithLinks] = useState<ResultsWithLinks[]>([]);
   // Displayed results
@@ -73,7 +90,7 @@ export default function Chat() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ "query": inputQuery })
+      body: JSON.stringify({ "query": originalQuery.current })
     });
     if (!searchRequest.ok) {
       throw new Error('Network response was not ok');
@@ -85,8 +102,25 @@ export default function Chat() {
     console.log(searchResults.current);
   };
   
-  const resultsPerLoad = 4
+  // const handlePromptValidation = async () => {
+  //   try {
+  //     const chatRequest = await fetch('/api/chat', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ "updatedQuery": `Given the following text:\n${originalQuery.current}\nDoes this look like a job description or candidate request? If no, explain in the given text language that you are not able to handle a request. Answer in JSON: {"answer": yes or no, "explanation": comment}` }),
+  //     });
+  //     if (!chatRequest.ok) {
+  //       throw new Error('Network response was not ok');
+  //     };
+  //     const result = await chatRequest.json();
+  //     validationResult.current = JSON.parse(result.content[0].text);
+  //   } catch (error) {
+  //     console.error('There was an error fetching the data', error);
+  //   };
+  // }
+
   const handleLLM = async () => {
+    const resultsPerLoad = 4
     if (searchResults.current) {
       const startIndex = displayedResults.current
       const endIndex = Math.min(displayedResults.current + resultsPerLoad, searchResults.current.length)
@@ -96,14 +130,22 @@ export default function Chat() {
           const chatRequest = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${inputQuery}.\nGive a comment between 50-80 words in spanish and an evaluation score on fit out of 10 of the following candidate:\n${searchResult.text}\nFormat the response in JSON with the following schema: {"name": candidate's full name with capitalized first letters, "email": candidate's email if exists, else blank string, "score": evaluation score, "comment": comment}` }),
+            body: JSON.stringify({ "updatedQuery": `With the following job description:\n${originalQuery.current}\nIn the same language as the given text, comment between 40-60 words on fit of the CV:\n${searchResult.text}\nRespond in JSON: {"name": candidate's full name with capitalized first letters, "email": candidate's email if exists, else blank string, "comment": comment}` }),
           });
           if (!chatRequest.ok) {
             throw new Error('Network response was not ok');
           };
           const result = await chatRequest.json();
           // Append each new piece of data along with its original text to the array
-          setResultsWithLinks(prevResults => [...prevResults, { chatResult: JSON.parse(result.choices[0].message.content), filename: searchResult.filename }]);
+          setResultsWithLinks(
+            prevResults => [...prevResults, {
+                // chatResult: JSON.parse(result.choices[0].message.content),
+                chatResult: JSON.parse(result.content[0].text),
+                affinity: Math.round(searchResult._additional.rerank[0].score * 100),
+                filename: searchResult.filename
+              }
+            ]
+          );
           displayedResults.current++;
         } catch (error) {
           console.error('There was an error fetching the data', error);
@@ -117,6 +159,7 @@ export default function Chat() {
     setResultsWithLinks([]);
     displayedResults.current = 0;
     setQuery(inputQuery);
+    originalQuery.current = inputQuery;
     setInputQuery("");
     await handleSearch();
     await handleLLM();
@@ -156,17 +199,15 @@ export default function Chat() {
         const emailRequest = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ "updatedQuery": `Given the following job description:\n${query}.\And the following CV:\n${selectedCandidate}\nWrite up a polite email 120-160 words) in Spanish to invite the candidate to participate in the selection process of Grupo PiSA. Address the candidate using first name. Includes a short comment on the candidate's fit. Format the response in JSON with the following schema: {"subject": email's subject, "body": email's body, "email": candidate's email}` }),
+          body: JSON.stringify({ "updatedQuery": `With the following job description:\n${originalQuery.current}.\nIn the same language as the given text, write up a polite email between 120-160 words to invite the candidate with the following CV:\n${selectedCandidate}\n to participate in the selection process of Grupo PiSA. Address the candidate using first name. Includes a short comment on the candidate's fit. Format the response in JSON: {"subject": email's subject, "body": email's body using %0D%0A as line break, "email": candidate's email}` }),
         });
         if (!emailRequest.ok) {
           throw new Error('Network response was not ok');
         }
         const result = await emailRequest.json();
-        // Append each new piece of data along with its original text to the array
-        const jsonResult = JSON.parse(result.choices[0].message.content)
-        const emailBody = jsonResult.body.replace(/\n/g, '%0D%0A');
+        const jsonResult = JSON.parse(result.content[0].text);
 
-        window.location.href = `mailto:${jsonResult.email}?subject=${jsonResult.subject}&body=${emailBody}`;
+        window.location.href = `mailto:${jsonResult.email}?subject=${jsonResult.subject}&body=${jsonResult.body}`;
         
         setEmailLoading(false)
       } catch (error) {
@@ -174,6 +215,19 @@ export default function Chat() {
       }
     })();
   }
+
+  const handleFileIcon = (fileName: string) => {
+    switch (fileName.toLowerCase().split(".").pop()) {
+      case "pdf":
+        return <FaFilePdf />;
+      case "doc":
+      case "docx":
+        return <FaFileWord />;
+      case "xls":
+      case "xlsx":
+        return <FaFileExcel />;
+    };
+  };
 
   return (
     <Flex
@@ -287,7 +341,7 @@ export default function Chat() {
               {resultsWithLinks.map((item, index) => (
                 <div key={index}>
                   <Fade in={true}>
-                    <div><b>{item.chatResult.name}:</b> {item.chatResult.score}/10</div>
+                    <div><b>{item.chatResult.name}:</b> {item.affinity}% coincidencia</div>
                     <div>{item.chatResult.comment}</div>
                   </Fade>
                   <SlideFade in={true} offsetY='20px' transition={{ enter: { delay: 0.1 } }}>
@@ -298,7 +352,7 @@ export default function Chat() {
                         target="_blank"
                         variant="outline"
                         size="sm"
-                        leftIcon={<FaFilePdf />}
+                        leftIcon={handleFileIcon(item.filename)}
                         marginTop='.3rem'
                         marginBottom='0.8rem'
                         _hover={{
